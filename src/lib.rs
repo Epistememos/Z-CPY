@@ -1,0 +1,42 @@
+#[cxx::bridge(namespace = "zcpy")]
+mod ffi {
+    /// Trivially copyable telemetry record — layout is identical in C++ and Rust.
+    ///
+    /// 16 bytes total: two fit per 64-byte cache line at peak density.
+    /// `#[repr(C)]` is enforced automatically by cxx for all shared structs.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    struct TelemetryPacket {
+        /// Nanoseconds since Unix epoch.
+        timestamp_ns: u64,
+        /// Measured signal value (IEEE 754 double).
+        value: f64,
+    }
+
+    extern "Rust" {
+        /// Ingests a batch passed from C++ without copying any packet data.
+        ///
+        /// On the C++ side this signature becomes:
+        ///   `::std::size_t zcpy::ingest_packets(::rust::Slice<const TelemetryPacket>);`
+        ///
+        /// `rust::Slice<T>` is a fat pointer `{ ptr: *const T, len: usize }` —
+        /// 16 bytes on the stack. The TelemetryPacket slab in the C++ MemTable
+        /// is never touched by the allocator on the Rust side.
+        fn ingest_packets(packets: &[TelemetryPacket]) -> usize;
+    }
+}
+
+mod ingestion;
+
+pub use ffi::TelemetryPacket;
+
+/// Called by C++ via the cxx bridge. `packets` is a borrowed view into the
+/// C++ MemTable buffer; this frame allocates nothing.
+pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
+    // Print the Rust-side pointer address for the zero-copy proof in main.cpp.
+    eprintln!(
+        "[Rust] ingest_packets  @ {:p}  ({} packets)",
+        packets.as_ptr(),
+        packets.len(),
+    );
+    ingestion::process_batch(packets)
+}
