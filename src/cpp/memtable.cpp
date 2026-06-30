@@ -4,7 +4,7 @@
 // This file is emitted by `cargo build` (via build.rs + cxx-build) before CMake
 // compiles this TU. Its include path is injected by corrosion_add_cxxbridge via
 // the INTERFACE_INCLUDE_DIRECTORIES of the `zcpy_bridge` target.
-#include "src/lib.rs.h"
+#include "zcpy_bridge/lib.h"
 
 #include <cstdlib>
 #include <new>

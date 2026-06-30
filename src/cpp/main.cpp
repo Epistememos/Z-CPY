@@ -3,7 +3,7 @@
 // cxx-generated header: defines TelemetryPacket (in namespace zcpy) and
 // declares `zcpy::ingest_packets(rust::Slice<const TelemetryPacket>) -> size_t`.
 // Also transitively includes <rust/cxx.h> for the rust::Slice template.
-#include "src/lib.rs.h"
+#include "zcpy_bridge/lib.h"
 
 #include <cstdint>
 #include <cstdio>

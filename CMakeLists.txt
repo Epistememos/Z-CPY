@@ -31,7 +31,7 @@ corrosion_import_crate(MANIFEST_PATH Cargo.toml)
 #      the generated header at "src/lib.rs.h".
 corrosion_add_cxxbridge(zcpy_bridge
     CRATE   zcpy
-    FILES   src/lib.rs
+    FILES   lib.rs
 )
 
 # ── C++ storage-engine executable ────────────────────────────────────────────
