@@ -8,17 +8,33 @@
 
 #include <cstdlib>
 #include <new>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 namespace zcpy {
 
 MemTable::MemTable(std::size_t capacity) : capacity_(capacity) {
-    void* raw = std::aligned_alloc(kCacheLineBytes, capacity * sizeof(TelemetryPacket));
-    if (raw == nullptr) throw std::bad_alloc{};
-    storage_ = static_cast<TelemetryPacket*>(raw);
+    int fd = open("memtable.bin", O_RDWR | O_CREAT, 0644);
+    if (fd < 0) {
+        throw std::bad_alloc{};
+    }   
+    if (ftruncate(fd, capacity * sizeof(TelemetryPacket)) != 0) {
+        close(fd);
+        throw std::bad_alloc{};
+    }
+    void* mapped = mmap(nullptr, capacity * sizeof(TelemetryPacket), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapped == MAP_FAILED) {
+        close(fd);
+        throw std::bad_alloc{};
+    }
+    close(fd);
+    storage_ = static_cast<TelemetryPacket*>(mapped);
 }
 
 MemTable::~MemTable() {
-    std::free(storage_);
+    msync(storage_, capacity_ * sizeof(TelemetryPacket), MS_SYNC); // Ensure data is written to the file before unmapping
+    munmap(storage_, capacity_ * sizeof(TelemetryPacket));
 }
 
 TelemetryPacket* MemTable::data() noexcept       { return storage_; }
