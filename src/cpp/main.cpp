@@ -11,9 +11,12 @@
 
 int main() {
     constexpr std::size_t kBatchSize = 8;
+    constexpr std::size_t kTableCapacity = 64;
 
     // ── Allocation lives entirely on the C++ side ─────────────────────────
-    zcpy::MemTable table{kBatchSize};
+    zcpy::MemTable table{kTableCapacity};
+    std::printf("[C++] Recovered %zu packets\n", table.size());
+
 
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(

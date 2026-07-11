@@ -23,6 +23,9 @@ MemTable::MemTable(std::size_t capacity) : capacity_(capacity) {
         close(fd);
         throw std::bad_alloc{};
     }
+
+    
+
     void* mapped = mmap(nullptr, capacity * sizeof(TelemetryPacket), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (mapped == MAP_FAILED) {
         close(fd);
@@ -30,6 +33,12 @@ MemTable::MemTable(std::size_t capacity) : capacity_(capacity) {
     }
     close(fd);
     storage_ = static_cast<TelemetryPacket*>(mapped);
+
+    std::size_t recovered = 0;
+    while (recovered < capacity_ && storage_[recovered].timestamp_ns != 0) {
+        ++recovered;
+    }
+    size_.store(recovered);
 }
 
 MemTable::~MemTable() {
@@ -63,4 +72,8 @@ std::span<const TelemetryPacket> MemTable::committed_view() const noexcept {
     return {storage_, size_.load(std::memory_order_acquire)};
 }
 
+void MemTable::flush() noexcept {
+    // Flush the memory-mapped file to disk
+    msync(storage_, capacity_ * sizeof(TelemetryPacket), MS_ASYNC);
+}
 } // namespace zcpy

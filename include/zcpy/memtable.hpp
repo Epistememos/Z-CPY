@@ -41,6 +41,7 @@ public:
     /// Appends a record at the next available slot. Lock-free, single-producer.
     /// Returns false if the buffer is at capacity (no partial write occurs).
     bool emplace(std::uint64_t timestamp_ns, double value) noexcept;
+    void flush() noexcept;
 
     /// Non-owning view over all committed records.
     /// The pointer identity is preserved — the same address will be visible

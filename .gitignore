@@ -17,3 +17,5 @@ Makefile
 
 # macOS
 .DS_Store
+
+memtable.bin
