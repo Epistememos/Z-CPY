@@ -17,10 +17,11 @@ int main() {
     zcpy::MemTable table{kTableCapacity};
     std::printf("[C++] Recovered %zu packets\n", table.size());
 
+    const std::uint64_t base = 1'000'000'000ULL + table.size() * 1'000ULL;
 
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(
-            1'000'000'000ULL + i * 1'000ULL,  // t₀ + i·1 µs
+            base + i * 1'000ULL,  // t₀ + i·1 µs
             static_cast<double>(i) * 0.1      // synthetic signal ramp
         );
         if (!ok) {
