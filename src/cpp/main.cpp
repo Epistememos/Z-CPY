@@ -50,5 +50,28 @@ int main() {
     std::printf("[C++] Zero-copy proof  : C++ ptr %p == Rust-visible ptr (see stderr)\n",
                 static_cast<const void*>(cpp_ptr));
 
+    // ── Validation gate tests ─────────────────────────────────────────────
+    // 1. Internally out-of-order: second timestamp goes backwards.
+    const zcpy::TelemetryPacket out_of_order[] = {
+        {.timestamp_ns = 2'000'000'000ULL, .value = 1.0},
+        {.timestamp_ns = 1'500'000'000ULL, .value = 2.0},
+    };
+    const std::size_t r1 = zcpy::ingest_packets({out_of_order, 2});
+    std::printf("[C++] out-of-order batch → %zu accepted (expect 0)\n", r1);
+
+    // 2. Internally ordered, but starts before the last accepted timestamp
+    //    (good batch ended at t₀ + 7 µs) — exercises the cross-batch gate.
+    const zcpy::TelemetryPacket stale[] = {
+        {.timestamp_ns = 1'000'003'000ULL, .value = 3.0},
+        {.timestamp_ns = 1'000'004'000ULL, .value = 4.0},
+    };
+    const std::size_t r2 = zcpy::ingest_packets({stale, 2});
+    std::printf("[C++] stale batch        → %zu accepted (expect 0)\n", r2);
+
+    if (r1 != 0 || r2 != 0) {
+        std::fputs("[C++] FAIL: validation gate accepted a bad batch\n", stderr);
+        return EXIT_FAILURE;
+    }
+
     return EXIT_SUCCESS;
 }

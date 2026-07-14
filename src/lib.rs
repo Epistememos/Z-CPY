@@ -29,14 +29,23 @@ mod ingestion;
 
 pub use ffi::TelemetryPacket;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+static LAST_TS: AtomicU64 = AtomicU64::new(0);
+
 /// Called by C++ via the cxx bridge. `packets` is a borrowed view into the
 /// C++ MemTable buffer; this frame allocates nothing.
 pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
+    let last_ts = LAST_TS.load(Ordering::Relaxed);
     // Print the Rust-side pointer address for the zero-copy proof in main.cpp.
     eprintln!(
         "[Rust] ingest_packets  @ {:p}  ({} packets)",
         packets.as_ptr(),
         packets.len(),
     );
-    ingestion::process_batch(packets)
+    let accepted = ingestion::process_batch(packets, last_ts);
+    if accepted > 0 {
+        let newest_ts = packets.last().unwrap();
+        LAST_TS.store(newest_ts.timestamp_ns, Ordering::Relaxed);
+    }
+    accepted
 }
