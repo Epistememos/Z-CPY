@@ -18,7 +18,10 @@ int main() {
     std::printf("[C++] Recovered %zu packets\n", table.size());
 
     const std::uint64_t base = 1'000'000'000ULL + table.size() * 1'000ULL;
-
+    if (table.size() > 0) {                                    // ← guard the empty case
+    zcpy::seed_last_ts(table.data()[table.size() - 1].timestamp_ns);
+    }
+    
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(
             base + i * 1'000ULL,  // t₀ + i·1 µs

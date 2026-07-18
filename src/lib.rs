@@ -22,6 +22,7 @@ mod ffi {
         /// 16 bytes on the stack. The TelemetryPacket slab in the C++ MemTable
         /// is never touched by the allocator on the Rust side.
         fn ingest_packets(packets: &[TelemetryPacket]) -> usize;
+        fn seed_last_ts(ts: u64);
     }
 }
 
@@ -31,6 +32,7 @@ pub use ffi::TelemetryPacket;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 static LAST_TS: AtomicU64 = AtomicU64::new(0);
+
 
 /// Called by C++ via the cxx bridge. `packets` is a borrowed view into the
 /// C++ MemTable buffer; this frame allocates nothing.
@@ -48,4 +50,8 @@ pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
         LAST_TS.store(newest_ts.timestamp_ns, Ordering::Relaxed);
     }
     accepted
+}
+
+pub fn seed_last_ts(ts: u64) {
+    LAST_TS.store(ts, Ordering::Relaxed);
 }
