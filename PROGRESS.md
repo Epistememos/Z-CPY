@@ -5,6 +5,16 @@ Newest first.
 
 ---
 
+## 2026-07-18 — Write-ahead log (append path)
+
+**Built:** `src/wal.rs` — new Rust module with `pub fn append(packets: &[TelemetryPacket]) -> bool`. Opens `wal.bin` with `O_APPEND | O_CREAT`, reinterprets the packet slice as raw bytes via an unsafe `slice::from_raw_parts` cast, and writes them in one `write_all` call. Wired into `ingest_packets` in `lib.rs`: WAL is written after validation passes and before `LAST_TS` is updated — if the WAL write fails, the function returns 0 (no acknowledgement without durability). Verified: after two runs `wal.bin` is 256 bytes and its first 256 bytes are identical to `memtable.bin`.
+
+**Bug fixed along the way:** `main.cpp` was passing `committed_view()` — all packets including recovered ones — to `ingest_packets`. On run 2, `LAST_TS` was seeded to the last recovered timestamp, so packet 0 of the full view (an old packet with a lower timestamp) failed validation immediately. Fixed by capturing `table.size()` before the write loop and slicing the view to only the newly emplaced packets (`view.data() + recovered`, `view.size() - recovered`).
+
+**Design note:** `wal.bin` stores the same raw 16-byte struct layout as `memtable.bin` — no serialization, same zero-cost write path. Sequential appends are the cheapest disk operation; the WAL never rewrites old bytes so a crash can't corrupt prior records. Torn tail is detectable: `file_size % 16 != 0`.
+
+Next: add `wal.bin` to `.gitignore`, then torn-tail detection and crash replay.
+
 ## 2026-07-18 — Gate persistence across restarts
 
 **Built:** `seed_last_ts(u64)` — first new FFI function since the scaffold. After the

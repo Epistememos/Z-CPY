@@ -30,7 +30,7 @@ Time-series ingestion (market data, sensor telemetry, metrics) is dominated by t
 
 Writes are durable via the mmap'd file: `emplace` dirties page-cache pages; the kernel flushes them lazily, `flush()` requests it explicitly (`MS_ASYNC`), and the destructor guarantees it (`MS_SYNC`). On startup, the committed packet count is recovered by scanning for the first zero timestamp (sound because `ftruncate` zero-fills and no valid packet has timestamp 0), and the validation gate is re-seeded from the recovered tail — a restarted engine rejects batches that would overlap data already on disk.
 
-A write-ahead log (append before acknowledge, replay after crash) is in progress — see the roadmap.
+Writes are also appended to `wal.bin` before acknowledgement — same raw bytes, sequential append, cheapest possible disk write. A crash after the WAL write but before the kernel flushes the mmap is recoverable; a torn tail (`file_size % 16 != 0`) is detectable. Crash replay is next on the roadmap.
 
 ### Deliberate design decisions
 
@@ -83,7 +83,8 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Hybrid build: CMake + Corrosion + cxx, zero-copy FFI proof
 - [x] mmap-backed MemTable with startup recovery and explicit flush
 - [x] Monotonic-timestamp ingestion gate, persistent across restarts
-- [ ] **Write-ahead log** — append-before-acknowledge, torn-tail detection, crash replay *(in progress)*
+- [x] **Write-ahead log (append path)** — append-before-acknowledge; `wal.bin` stores raw packet bytes, identical layout to `memtable.bin`; WAL failure blocks acknowledgement
+- [ ] WAL crash replay — torn-tail detection (`file_size % 16`), replay into memtable on startup
 - [ ] High-water-mark flush signal (background compaction trigger)
 - [ ] Read path: binary-searched time-range scans over the mmap (zero-copy reads)
 - [ ] Benchmarks: ingest throughput + p99 latency (criterion); allocation-free hot path validation

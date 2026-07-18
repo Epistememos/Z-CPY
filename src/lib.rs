@@ -27,6 +27,7 @@ mod ffi {
 }
 
 mod ingestion;
+mod wal;
 
 pub use ffi::TelemetryPacket;
 
@@ -47,7 +48,12 @@ pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
     let accepted = ingestion::process_batch(packets, last_ts);
     if accepted > 0 {
         let newest_ts = packets.last().unwrap();
+        if !wal::append(&packets[..accepted]) {
+            eprintln!("[Rust] ERROR: failed to append to WAL");
+            return 0;
+        }
         LAST_TS.store(newest_ts.timestamp_ns, Ordering::Relaxed);
+    
     }
     accepted
 }

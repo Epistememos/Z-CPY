@@ -21,7 +21,9 @@ int main() {
     if (table.size() > 0) {                                    // ← guard the empty case
     zcpy::seed_last_ts(table.data()[table.size() - 1].timestamp_ns);
     }
-    
+
+    const std::size_t recovered = table.size();
+
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(
             base + i * 1'000ULL,  // t₀ + i·1 µs
@@ -42,9 +44,9 @@ int main() {
                 view.size() * sizeof(zcpy::TelemetryPacket));
 
     // ── Zero-copy FFI call ────────────────────────────────────────────────
-    // rust::Slice<T> is { ptr: *const T, len: usize } — 16 bytes on the stack.
     // The TelemetryPacket slab is not touched by any allocator on the Rust side.
-    const rust::Slice<const zcpy::TelemetryPacket> rs_slice{view.data(), view.size()};
+    const rust::Slice<const zcpy::TelemetryPacket> rs_slice{view.data() + recovered, view.size() - recovered};
+
 
     const std::size_t ingested = zcpy::ingest_packets(rs_slice);
 
