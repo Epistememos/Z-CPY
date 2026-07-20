@@ -23,6 +23,7 @@ mod ffi {
         /// is never touched by the allocator on the Rust side.
         fn ingest_packets(packets: &[TelemetryPacket]) -> usize;
         fn seed_last_ts(ts: u64);
+        fn wal_startup_check() -> bool;
     }
 }
 
@@ -60,4 +61,8 @@ pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
 
 pub fn seed_last_ts(ts: u64) {
     LAST_TS.store(ts, Ordering::Relaxed);
+}
+
+pub fn wal_startup_check() -> bool {
+    wal::torn_tail_detection()
 }

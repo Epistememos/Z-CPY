@@ -17,13 +17,19 @@ int main() {
     zcpy::MemTable table{kTableCapacity};
     std::printf("[C++] Recovered %zu packets\n", table.size());
 
+    // ── Synthetic batch generation ───────────────────────────────────────
     const std::uint64_t base = 1'000'000'000ULL + table.size() * 1'000ULL;
     if (table.size() > 0) {                                    // ← guard the empty case
     zcpy::seed_last_ts(table.data()[table.size() - 1].timestamp_ns);
     }
 
-    const std::size_t recovered = table.size();
+    if (!zcpy::wal_startup_check()) {
+        std::fputs("[C++] WAL repair failed\n", stderr);
+        return EXIT_FAILURE;
+    }
 
+    const std::size_t recovered = table.size();
+    // ── Populate the MemTable with a batch of synthetic telemetry ─────────
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(
             base + i * 1'000ULL,  // t₀ + i·1 µs
