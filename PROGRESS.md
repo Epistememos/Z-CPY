@@ -5,6 +5,20 @@ Newest first.
 
 ---
 
+## 2026-07-20 — WAL crash replay + fsync + torn tail detection
+
+**Built:** Three remaining WAL pieces.
+
+`fsync` — `file.sync_all()` added to `append` after `write_all`. Blocks until the OS confirms bytes hit physical storage. Without it, `write_all` only reaches the OS buffer; a power cut before the OS flushes would silently lose the WAL entry.
+
+`torn_tail_detection` — new function in `wal.rs`. Opens `wal.bin` with write access, checks `file_size % 16`. If not a multiple of 16, a partial packet was written before a crash; `set_len` truncates back to the last clean 16-byte boundary. Missing file returns `true` — nothing to repair.
+
+Crash replay — `wal_replay_len(memtable_count)` and `wal_replay_packet(index)` exposed across the cxx bridge. `wal_replay_len` calls `wal::replay`, caches the result in a static `Mutex<Vec<TelemetryPacket>>`, and returns the count of missing packets. `wal_replay_packet` returns one packet by index. `main.cpp` loops over the count and emplaces each packet back into the memtable before the normal write loop. Verified: deleting `memtable.bin` and restarting correctly replays all 48 WAL packets before writing 8 new ones.
+
+**Why the static Vec:** `Vec<TelemetryPacket>` can't cross the cxx bridge directly — cxx only allows simple types. Caching on the Rust side and fetching one packet at a time keeps the bridge clean.
+
+Next: read path — binary search over the mmap'd slab for time-range queries.
+
 ## 2026-07-18 — Write-ahead log (append path)
 
 **Built:** `src/wal.rs` — new Rust module with `pub fn append(packets: &[TelemetryPacket]) -> bool`. Opens `wal.bin` with `O_APPEND | O_CREAT`, reinterprets the packet slice as raw bytes via an unsafe `slice::from_raw_parts` cast, and writes them in one `write_all` call. Wired into `ingest_packets` in `lib.rs`: WAL is written after validation passes and before `LAST_TS` is updated — if the WAL write fails, the function returns 0 (no acknowledgement without durability). Verified: after two runs `wal.bin` is 256 bytes and its first 256 bytes are identical to `memtable.bin`.

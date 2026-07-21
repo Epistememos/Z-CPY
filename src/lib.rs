@@ -24,6 +24,8 @@ mod ffi {
         fn ingest_packets(packets: &[TelemetryPacket]) -> usize;
         fn seed_last_ts(ts: u64);
         fn wal_startup_check() -> bool;
+        fn wal_replay_len(memtable_count: usize) -> usize;
+        fn wal_replay_packet(index: usize) -> TelemetryPacket;
     }
 }
 
@@ -34,6 +36,7 @@ pub use ffi::TelemetryPacket;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 static LAST_TS: AtomicU64 = AtomicU64::new(0);
+static WAL_REPLAY: std::sync::Mutex<Vec<TelemetryPacket>> = std::sync::Mutex::new(Vec::new());
 
 
 /// Called by C++ via the cxx bridge. `packets` is a borrowed view into the
@@ -65,4 +68,19 @@ pub fn seed_last_ts(ts: u64) {
 
 pub fn wal_startup_check() -> bool {
     wal::torn_tail_detection()
+}
+
+pub fn wal_replay_len(memtable_count: usize) -> usize {
+    let replayed = match wal::replay(memtable_count) {
+        Some(packets) => packets,
+        None => return 0,
+    };
+    let mut guard = WAL_REPLAY.lock().unwrap();
+    *guard = replayed;
+    guard.len()
+}
+
+pub fn wal_replay_packet(index: usize) -> TelemetryPacket {
+    let guard = WAL_REPLAY.lock().unwrap();
+    guard[index]
 }

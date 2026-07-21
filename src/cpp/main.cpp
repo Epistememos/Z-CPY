@@ -28,7 +28,19 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    // ── WAL replay ───────────────────────────────────────────────────────
+    const std::size_t replay_count = zcpy::wal_replay_len(table.size());
+    for (std::size_t i = 0; i < replay_count; ++i) {
+        const auto pkt = zcpy::wal_replay_packet(i);
+        table.emplace(pkt.timestamp_ns, pkt.value);
+    }
+    if (replay_count > 0) {
+        std::printf("[C++] Replayed %zu packets from WAL\n", replay_count);
+    }
+    
+    // ── Capture the current size for the zero-copy FFI call ─────────────
     const std::size_t recovered = table.size();
+
     // ── Populate the MemTable with a batch of synthetic telemetry ─────────
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(

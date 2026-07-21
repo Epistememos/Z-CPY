@@ -50,3 +50,26 @@ pub fn torn_tail_detection() -> bool {
     }
     true
 }
+
+pub fn replay(memtable_count: usize) -> Option<Vec<TelemetryPacket>> {
+    let bytes: Vec<u8> = match std::fs::read("wal.bin") {
+    Ok(b) => b,
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Some(vec![]),
+    Err(_) => return None,
+    };
+    // Interpret the bytes as a slice of TelemetryPacket.
+    let packet_count = bytes.len() / std::mem::size_of::<TelemetryPacket>();
+    let packets: &[TelemetryPacket] = unsafe {
+        std::slice::from_raw_parts(
+            bytes.as_ptr() as *const TelemetryPacket,
+            packet_count,
+        )
+    };
+    // Return the packets that have not yet been ingested into the MemTable.
+    if memtable_count >= packets.len() {
+        return Some(vec![]);
+    }
+
+    Some(packets[memtable_count..].to_vec())
+    
+}
