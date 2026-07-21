@@ -22,6 +22,9 @@ pub fn append(packets: &[TelemetryPacket]) -> bool {
     if file.write_all(bytes).is_err() {
         return false;
     }
+    if file.sync_all().is_err() {
+        return false;
+    }
     true
 }
 
