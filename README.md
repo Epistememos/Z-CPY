@@ -21,7 +21,7 @@ Time-series ingestion (market data, sensor telemetry, metrics) is dominated by t
 
 | Layer | Language | Responsibility |
 |---|---|---|
-| **MemTable** | C++20 | Cache-line-aligned (64 B) slab, `mmap`-backed (`MAP_SHARED`) — writes land in the kernel page cache and *are* the file. Atomic slot claims (single-producer), startup recovery scan, `msync` flush control. |
+| **MemTable** | C++20 | Cache-line-aligned (64 B) slab, `mmap`-backed (`MAP_SHARED`) — writes land in the kernel page cache and *are* the file. Atomic slot claims (single-producer), startup recovery scan, `msync` flush control. Time-range queries via `std::lower_bound`/`std::upper_bound` — zero-copy reads into the mmap'd slab. |
 | **Ingestion gate** | Rust 2021 | Validates batches in place through a borrowed slice — strictly monotonic timestamps, within and across batches (all-or-nothing accept). Cross-batch high-water mark (`AtomicU64`), seeded from recovered data on startup. |
 | **FFI bridge** | [cxx](https://cxx.rs) | `TelemetryPacket` (16 B, trivially copyable) shared by layout between both languages. Batches cross as `rust::Slice` — a pointer + length, never a copy. Verified at runtime: both sides print the same buffer address. |
 | **Build** | CMake + [Corrosion](https://github.com/corrosion-rs/corrosion) | Single `cmake --build` drives Cargo, generates the cxx bridge, and links the Rust staticlib into the C++ executable. |
@@ -85,7 +85,7 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Monotonic-timestamp ingestion gate, persistent across restarts
 - [x] **Write-ahead log** — append-before-acknowledge with fsync; torn-tail detection and repair on startup; crash replay rebuilds memtable from WAL when memtable is missing or incomplete
 - [ ] High-water-mark flush signal (background compaction trigger)
-- [ ] Read path: binary-searched time-range scans over the mmap (zero-copy reads)
+- [x] Read path: binary-searched time-range scans over the mmap (zero-copy reads)
 - [ ] Benchmarks: ingest throughput + p99 latency (criterion); allocation-free hot path validation
 - [ ] Stateful `Ingester` handle over the bridge (multi-stream support)
 

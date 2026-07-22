@@ -5,6 +5,16 @@ Newest first.
 
 ---
 
+## 2026-07-21 — Read path: binary search time-range query
+
+**Built:** `MemTable::query(uint64_t start_ns, uint64_t end_ns)` in `memtable.cpp`. Uses `std::lower_bound` to find the first packet with `timestamp_ns >= start_ns` and `std::upper_bound` to find the first packet past `end_ns`. Returns `std::span<const TelemetryPacket>` — a non-owning slice directly into the mmap'd slab. Zero copy: no data moved, just two pointers into existing memory.
+
+**Bug hit:** `upper_bound` comparator had operands reversed (`p.timestamp_ns < ts` instead of `ts < p.timestamp_ns`), causing `higher < lower` and a `size_t` underflow → 18446744073709551560 packets returned. Fixed by restoring the correct comparator. Rule: comparator body is always `first_param < second_param`; only the parameter order differs between `lower_bound` and `upper_bound`.
+
+**Verified:** `query(base, base + 3000)` returns exactly 4 packets on a fresh run.
+
+Next: benchmarks (ingest throughput + p99 latency), then multi-stream support.
+
 ## 2026-07-20 — WAL crash replay + fsync + torn tail detection
 
 **Built:** Three remaining WAL pieces.
