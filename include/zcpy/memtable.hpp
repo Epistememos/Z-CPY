@@ -47,6 +47,7 @@ public:
     /// The pointer identity is preserved — the same address will be visible
     /// inside Rust after the FFI call, proving zero-copy transfer.
     [[nodiscard]] std::span<const TelemetryPacket> committed_view() const noexcept;
+    [[nodiscard]] std::span<const TelemetryPacket> query(uint64_t start_ns, uint64_t end_ns) const noexcept;
 
 private:
     TelemetryPacket*         storage_;

@@ -13,14 +13,14 @@ int main() {
     constexpr std::size_t kBatchSize = 8;
     constexpr std::size_t kTableCapacity = 64;
 
-    // ── Allocation lives entirely on the C++ side ─────────────────────────
+    // Allocation lives entirely on the C++ side.
     zcpy::MemTable table{kTableCapacity};
     std::printf("[C++] Recovered %zu packets\n", table.size());
 
-    // ── Synthetic batch generation ───────────────────────────────────────
+    // Synthetic batch generation.
     const std::uint64_t base = 1'000'000'000ULL + table.size() * 1'000ULL;
-    if (table.size() > 0) {                                    // ← guard the empty case
-    zcpy::seed_last_ts(table.data()[table.size() - 1].timestamp_ns);
+    if (table.size() > 0) {
+        zcpy::seed_last_ts(table.data()[table.size() - 1].timestamp_ns);
     }
 
     if (!zcpy::wal_startup_check()) {
@@ -28,7 +28,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    // ── WAL replay ───────────────────────────────────────────────────────
+    // WAL replay.
     const std::size_t replay_count = zcpy::wal_replay_len(table.size());
     for (std::size_t i = 0; i < replay_count; ++i) {
         const auto pkt = zcpy::wal_replay_packet(i);
@@ -37,15 +37,15 @@ int main() {
     if (replay_count > 0) {
         std::printf("[C++] Replayed %zu packets from WAL\n", replay_count);
     }
-    
-    // ── Capture the current size for the zero-copy FFI call ─────────────
+
+    // Capture the current size for the zero-copy FFI call.
     const std::size_t recovered = table.size();
 
-    // ── Populate the MemTable with a batch of synthetic telemetry ─────────
+    // Populate the MemTable with a batch of synthetic telemetry.
     for (std::uint64_t i = 0; i < kBatchSize; ++i) {
         const bool ok = table.emplace(
-            base + i * 1'000ULL,  // t₀ + i·1 µs
-            static_cast<double>(i) * 0.1      // synthetic signal ramp
+            base + i * 1'000ULL,          // t0 + i * 1 microsecond
+            static_cast<double>(i) * 0.1  // synthetic signal ramp
         );
         if (!ok) {
             std::fputs("[C++] MemTable overflow — raise kBatchSize\n", stderr);
@@ -61,20 +61,18 @@ int main() {
                 view.size(),
                 view.size() * sizeof(zcpy::TelemetryPacket));
 
-    // ── Zero-copy FFI call ────────────────────────────────────────────────
-    // The TelemetryPacket slab is not touched by any allocator on the Rust side.
+    // Zero-copy FFI call. The TelemetryPacket slab is not touched by any
+    // allocator on the Rust side.
     const rust::Slice<const zcpy::TelemetryPacket> rs_slice{view.data() + recovered, view.size() - recovered};
-
 
     const std::size_t ingested = zcpy::ingest_packets(rs_slice);
 
-    // ── Verification ─────────────────────────────────────────────────────
     // Rust prints its slice pointer to stderr above; it must match cpp_ptr.
     std::printf("[C++] ingest_packets   → %zu packets accepted\n", ingested);
     std::printf("[C++] Zero-copy proof  : C++ ptr %p == Rust-visible ptr (see stderr)\n",
                 static_cast<const void*>(cpp_ptr));
 
-    // ── Validation gate tests ─────────────────────────────────────────────
+    // Validation gate tests.
     // 1. Internally out-of-order: second timestamp goes backwards.
     const zcpy::TelemetryPacket out_of_order[] = {
         {.timestamp_ns = 2'000'000'000ULL, .value = 1.0},
@@ -96,6 +94,9 @@ int main() {
         std::fputs("[C++] FAIL: validation gate accepted a bad batch\n", stderr);
         return EXIT_FAILURE;
     }
+
+    const auto results = table.query(base, base + 3'000ULL);
+    std::printf("[C++] query [base, base+3µs] → %zu packets\n", results.size());
 
     return EXIT_SUCCESS;
 }

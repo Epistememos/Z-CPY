@@ -5,6 +5,12 @@ Newest first.
 
 ---
 
+## 2026-07-22 — Google Benchmark wired into CMake
+
+**Built:** `zcpy_bench` target added via `FetchContent` (Google Benchmark), same pattern as Corrosion. Links `zcpy_bridge`/`zcpy` so it can time the full FFI path, not just Rust in isolation (criterion can't cross the bridge). `-O2 -march=native` set explicitly.
+
+**Next problem:** `LAST_TS` will reject repeated timestamps across benchmark iterations — need fresh monotonic timestamps per loop. `bench/bench_ingest.cpp` not written yet.
+
 ## 2026-07-21 — Read path: binary search time-range query
 
 **Built:** `MemTable::query(uint64_t start_ns, uint64_t end_ns)` in `memtable.cpp`. Uses `std::lower_bound` to find the first packet with `timestamp_ns >= start_ns` and `std::upper_bound` to find the first packet past `end_ns`. Returns `std::span<const TelemetryPacket>` — a non-owning slice directly into the mmap'd slab. Zero copy: no data moved, just two pointers into existing memory.

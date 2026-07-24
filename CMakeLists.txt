@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD          20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS        OFF)
 
-# ── Corrosion: CMake ↔ Cargo bridge ──────────────────────────────────────────
+# Corrosion: CMake <-> Cargo bridge
 # Fetches and builds Corrosion at configure time; no system install required.
 include(FetchContent)
 FetchContent_Declare(
@@ -34,7 +34,7 @@ corrosion_add_cxxbridge(zcpy_bridge
     FILES   lib.rs
 )
 
-# ── C++ storage-engine executable ────────────────────────────────────────────
+# C++ storage-engine executable
 add_executable(zcpy_engine
     src/cpp/main.cpp
     src/cpp/memtable.cpp
@@ -61,3 +61,23 @@ target_link_libraries(zcpy_engine PRIVATE
     zcpy_bridge   # cxx-generated C++ stubs + propagates generated include dirs
     zcpy          # Rust static archive (libzcpy.a) via Corrosion
 )
+
+# Google Benchmark 
+FetchContent_Declare(
+    googlebenchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.9.1
+) 
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googlebenchmark)
+
+# New executable
+add_executable(zcpy_bench
+    bench/bench_ingest.cpp
+    src/cpp/memtable.cpp
+)
+
+target_compile_features(zcpy_bench PRIVATE cxx_std_20)
+target_include_directories(zcpy_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_options(zcpy_bench PRIVATE -O2 -march=native)
+target_link_libraries(zcpy_bench PRIVATE benchmark::benchmark zcpy_bridge zcpy)

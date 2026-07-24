@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <algorithm>
 
 namespace zcpy {
 
@@ -76,4 +77,17 @@ void MemTable::flush() noexcept {
     // Flush the memory-mapped file to disk
     msync(storage_, capacity_ * sizeof(TelemetryPacket), MS_ASYNC);
 }
+
+std::span<const TelemetryPacket> MemTable::query(uint64_t start_ns, uint64_t end_ns) const noexcept {
+    // Return a view of the committed records within the specified time range
+    auto begin = storage_;
+    auto end = storage_ + size_.load(std::memory_order_acquire);
+
+    auto lower = std::lower_bound(begin, end, start_ns, [](const TelemetryPacket& p, uint64_t ts) { return p.timestamp_ns < ts; });
+
+    auto higher = std::upper_bound(begin, end, end_ns, [](uint64_t ts, const TelemetryPacket& p) { return p.timestamp_ns > ts; });
+
+    return std::span{lower, higher};
+}
+
 } // namespace zcpy
