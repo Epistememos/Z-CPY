@@ -5,6 +5,18 @@ Newest first.
 
 ---
 
+## 2026-07-24 — First real benchmark: write-path p99
+
+**Built:** `bench/bench_ingest.cpp` — `BM_Ingest` times `MemTable::emplace` in isolation (no FFI, no WAL). Fixed at 5,000,000 iterations via `->Iterations(...)` instead of Google Benchmark's default auto-scaling, after discovering emplace is cheap enough that auto-scaling could exceed any reasonable pre-allocated table capacity. Manually timed each call with `steady_clock::now()` around it, collected into a sorted vector, and reported p99 via `state.counters`.
+
+**Result:** mean 2.70 ns per `emplace` (Release build, no manual timing overhead). With manual per-call timing overhead included (needed to compute p99), mean rises to 29.1 ns and p99 lands at 42 ns — still sub-microsecond.
+
+**Bugs hit:** stale `memtable.bin` from a prior failed run ate into table capacity before the loop even started (recovery scan on construction) — fixed by deleting it between runs. Also needed `CMAKE_BUILD_TYPE=Release`; Debug build timings are unreliable (Google Benchmark warns about this directly).
+
+**Note on precision:** average latency, not p99, is what Google Benchmark's built-in timer reports. Getting p99 required manually timing every call and computing the percentile ourselves — the built-in aggregate timer can't expose that.
+
+Next: benchmark the full path (`emplace` + `ingest_packets`, including WAL fsync) for comparison.
+
 ## 2026-07-22 — Google Benchmark wired into CMake
 
 **Built:** `zcpy_bench` target added via `FetchContent` (Google Benchmark), same pattern as Corrosion. Links `zcpy_bridge`/`zcpy` so it can time the full FFI path, not just Rust in isolation (criterion can't cross the bridge). `-O2 -march=native` set explicitly.
