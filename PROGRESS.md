@@ -5,6 +5,18 @@ Newest first.
 
 ---
 
+## 2026-07-25 — Full-path benchmark: fsync-durable ingest cost
+
+**Built:** `BM_IngestFull` — times `emplace` + `ingest_packets` together (FFI call, Rust validation, WAL append with fsync). Passes a length-1 slice of just the newest packet per call (`table.data() + (counter - 1)`), avoiding the same re-validation-of-everything bug the `recovered` slice fix in `main.cpp` already caught — passing the growing `committed_view()` here would re-validate the whole WAL history on every call instead of just the new packet.
+
+**Result:** 251 µs mean / 48.0 ms p99 — roughly a million-times slower than the write-only path (29.3 ns / 42 ns), entirely attributable to `fsync`. Ruled out the `eprintln!` debug logging in `ingest_packets` as a factor (removing it barely moved the numbers) — confirmed the cost is real I/O, not print overhead.
+
+**Root cause of the fat p99 tail:** `wal::append` reopens `wal.bin` from scratch on every call (`OpenOptions::new().open(...)` inside the function) before writing and fsyncing — full open/close syscall cost stacked on top of the fsync itself, every packet. Not fixed yet.
+
+**Context vs production systems:** most real WAL-based engines (RocksDB, Kafka) don't fsync per write — they batch many writes into one fsync (group commit) or skip local fsync and rely on replication instead. Per-write fsync, which this benchmark measures, is the deliberately slow/safe end of the spectrum.
+
+Next: keep the WAL file handle open across calls instead of reopening every time; longer-term, batch fsyncs across multiple writes (group commit).
+
 ## 2026-07-24 — First real benchmark: write-path p99
 
 **Built:** `bench/bench_ingest.cpp` — `BM_Ingest` times `MemTable::emplace` in isolation (no FFI, no WAL). Fixed at 5,000,000 iterations via `->Iterations(...)` instead of Google Benchmark's default auto-scaling, after discovering emplace is cheap enough that auto-scaling could exceed any reasonable pre-allocated table capacity. Manually timed each call with `steady_clock::now()` around it, collected into a sorted vector, and reported p99 via `state.counters`.

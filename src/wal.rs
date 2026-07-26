@@ -4,6 +4,7 @@ use std::io::Write;
 
 pub fn append(packets: &[TelemetryPacket]) -> bool {
     // Appends a batch of packets to the WAL file. Returns true on success, false on failure.
+    //
     let mut file = match OpenOptions::new()
         .create(true)
         .append(true)
@@ -22,6 +23,7 @@ pub fn append(packets: &[TelemetryPacket]) -> bool {
     if file.write_all(bytes).is_err() {
         return false;
     }
+    // Main performance bottleneck, for future versions, either batch writes (group commit) or just replicate on another machine (like Kafka)
     if file.sync_all().is_err() {
         return false;
     }
