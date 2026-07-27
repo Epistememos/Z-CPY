@@ -5,6 +5,14 @@ Newest first.
 
 ---
 
+## 2026-07-26 — Fixed WAL file-reopen: p99 dropped 8x
+
+**Built:** `wal::append` no longer reopens `wal.bin` on every call. A `static Mutex<Option<File>>` caches the file handle across calls — opened once on first use, reused afterward. Getting a usable `&mut File` out of the cached `Option` without moving it out of the `Mutex` guard: check `guard.is_none()`, open and store via `*guard = Some(file)` if empty, then `guard.as_mut().unwrap()` to borrow it in place.
+
+**Result:** `BM_IngestFull` mean CPU dropped 251 µs → 128 µs (~2x); p99 dropped 48.0 ms → 6.07 ms (~8x). The p99 improvement is much larger than the mean improvement — the file-reopen was an intermittent, spiky cost (filesystem metadata churn on open/close), not a constant one, so removing it disproportionately helped worst-case latency.
+
+**What's left as the real floor:** `fsync` itself. 128 µs mean is now roughly in line with typical single-fsync latency — that cost doesn't go away without batching multiple writes into one fsync call (group commit), which is a bigger architectural change, not a bug fix.
+
 ## 2026-07-25 — Full-path benchmark: fsync-durable ingest cost
 
 **Built:** `BM_IngestFull` — times `emplace` + `ingest_packets` together (FFI call, Rust validation, WAL append with fsync). Passes a length-1 slice of just the newest packet per call (`table.data() + (counter - 1)`), avoiding the same re-validation-of-everything bug the `recovered` slice fix in `main.cpp` already caught — passing the growing `committed_view()` here would re-validate the whole WAL history on every call instead of just the new packet.

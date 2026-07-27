@@ -5,14 +5,17 @@ use std::io::Write;
 pub fn append(packets: &[TelemetryPacket]) -> bool {
     // Appends a batch of packets to the WAL file. Returns true on success, false on failure.
     //
-    let mut file = match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("wal.bin")
-    {
-        Ok(f) => f,
+    static WAL_FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+    let mut guard = WAL_FILE.lock().unwrap();
+    if guard.is_none() {
+        *guard = match OpenOptions::new().create(true).append(true).open("wal.bin") {
+        Ok(f) => Some(f),
         Err(_) => return false,
-    };
+        };
+    }
+    
+    let file = guard.as_mut().unwrap();
+   
     // TelemetryPacket is #[repr(C)] and trivially copyable, so we can safely treat the slice as a byte slice.
     let bytes = unsafe {
         std::slice::from_raw_parts(

@@ -87,8 +87,9 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [ ] High-water-mark flush signal (background compaction trigger)
 - [x] Read path: binary-searched time-range scans over the mmap (zero-copy reads)
 - [x] Write-path benchmark (Google Benchmark, C++): `MemTable::emplace` — 29.3 ns mean, 42 ns p99
-- [x] Full-path benchmark: `emplace` + `ingest_packets` (FFI + validation + WAL fsync) — 251 µs mean, 48.0 ms p99
-- [ ] Reduce WAL fsync tail latency — avoid reopening `wal.bin` on every append; batch fsyncs (group commit)
+- [x] Full-path benchmark: `emplace` + `ingest_packets` (FFI + validation + WAL fsync) — 128 µs mean, 6.07 ms p99
+- [x] Cached the WAL file handle across calls instead of reopening every append — cut p99 8x (48.0 ms → 6.07 ms)
+- [ ] Batch fsyncs across multiple writes (group commit) — the remaining cost is the fsync syscall itself
 - [ ] Stateful `Ingester` handle over the bridge (multi-stream support)
 
 ## Progress log
