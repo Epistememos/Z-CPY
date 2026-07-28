@@ -5,6 +5,14 @@ Newest first.
 
 ---
 
+## 2026-07-27 — Multi-stream proof: per-stream MemTable isolation
+
+**Built:** `MemTable`'s constructor now takes a filename (`const std::string&`) instead of hardcoding `"memtable.bin"` — `MemTable(const std::string& filename, std::size_t capacity = kDefaultCapacity)`. Since `MemTable` can't be copied or moved (deleted constructors), multiple instances are held via `std::unique_ptr`. `main.cpp` now constructs two independent streams (`amd.bin`, `nvda.bin`) alongside the original table, emplaces into each, and prints all three buffer addresses — confirmed three distinct addresses, three distinct files, no shared state.
+
+**Design decision:** chose one `MemTable` per stream over a single shared buffer with a `stream_id` tag. A shared buffer would break the binary-search read path's core invariant (the whole buffer being one globally sorted array by timestamp) and require rebuilding per-stream separation by hand anyway. Per-stream tables get that isolation structurally, for free.
+
+**Known gap, not yet fixed:** `LAST_TS`, `ingest_packets`, and the WAL are still global on the Rust side. AMD and NVDA are proven isolated at the `MemTable`/C++ level, but are not yet safe to route through `ingest_packets` — one stream's timestamps would incorrectly gate the other's. That's the next multi-stream step: making the validation gate and WAL per-stream too.
+
 ## 2026-07-26 — Fixed WAL file-reopen: p99 dropped 8x
 
 **Built:** `wal::append` no longer reopens `wal.bin` on every call. A `static Mutex<Option<File>>` caches the file handle across calls — opened once on first use, reused afterward. Getting a usable `&mut File` out of the cached `Option` without moving it out of the `Mutex` guard: check `guard.is_none()`, open and store via `*guard = Some(file)` if empty, then `guard.as_mut().unwrap()` to borrow it in place.

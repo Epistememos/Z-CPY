@@ -90,6 +90,8 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Full-path benchmark: `emplace` + `ingest_packets` (FFI + validation + WAL fsync) — 128 µs mean, 6.07 ms p99
 - [x] Cached the WAL file handle across calls instead of reopening every append — cut p99 8x (48.0 ms → 6.07 ms)
 - [ ] Batch fsyncs across multiple writes (group commit) — the remaining cost is the fsync syscall itself
+- [x] Multi-stream proof: `MemTable` takes a filename, multiple independent instances via `unique_ptr` (C++-level isolation only)
+- [ ] Per-stream `LAST_TS` gate and WAL — `ingest_packets`/WAL are still global on the Rust side, not yet stream-aware
 - [ ] Stateful `Ingester` handle over the bridge (multi-stream support)
 
 ## Progress log

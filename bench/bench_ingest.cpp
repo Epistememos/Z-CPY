@@ -13,8 +13,8 @@ static void BM_Ingest(benchmark::State& state) {
     constexpr std::size_t kTableCapacity = 100000000;
     std::uint64_t counter = 1;
 
-    zcpy::MemTable table{kTableCapacity};
-    
+    zcpy::MemTable table{"bench_ingest.bin", kTableCapacity};
+
     // Saving timing per iteration for sub-us p99
     std::vector<std::int64_t> latencies_ns;
     latencies_ns.reserve(5'000'000);
@@ -42,7 +42,7 @@ static void BM_IngestFull(benchmark::State& state) {
     constexpr std::size_t kTableCapacity = 100000000;
     std::uint64_t counter = 1;
 
-    zcpy::MemTable table{kTableCapacity};
+    zcpy::MemTable table{"bench_ingest_full.bin", kTableCapacity};
 
     std::vector<std::int64_t> latencies_ns;
     latencies_ns.reserve(10'000);

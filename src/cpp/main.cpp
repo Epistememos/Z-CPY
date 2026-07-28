@@ -14,7 +14,7 @@ int main() {
     constexpr std::size_t kTableCapacity = 64;
 
     // Allocation lives entirely on the C++ side.
-    zcpy::MemTable table{kTableCapacity};
+    zcpy::MemTable table{"memtable.bin", kTableCapacity};
     std::printf("[C++] Recovered %zu packets\n", table.size());
 
     // Synthetic batch generation.
@@ -97,6 +97,41 @@ int main() {
 
     const auto results = table.query(base, base + 3'000ULL);
     std::printf("[C++] query [base, base+3µs] → %zu packets\n", results.size());
+
+    auto amd_table = std::make_unique<zcpy::MemTable>("amd.bin", 64);
+    auto nvda_table = std::make_unique<zcpy::MemTable>("nvda.bin", 128);
+
+    for (std::uint64_t i = 0; i < 64; ++i) {
+        const bool amd = amd_table->emplace(
+            base + i * 1'000ULL,          // t0 + i * 1 microsecond
+            static_cast<double>(i) * 0.1  // synthetic signal ramp
+        );
+        const bool nvda = nvda_table->emplace(
+            base + i * 1'000ULL,          // t0 + i * 1 microsecond
+            static_cast<double>(i) * 0.1  // synthetic signal ramp
+        );
+        if (!amd || !nvda) {
+            std::fputs("[C++] MemTable overflow — raise kBatchSize\n", stderr);
+            return EXIT_FAILURE;
+        }
+    }
+
+    const auto amd_view     = amd_table->committed_view();   // non-owning span
+    const auto* amd_ptr = amd_view.data();              // stable address under test
+    std::printf("[C++] AMD MemTable buffer  @ %p  (%zu packets, %zu bytes)\n",
+                static_cast<const void*>(amd_ptr),
+                amd_view.size(),
+                amd_view.size() * sizeof(zcpy::TelemetryPacket));
+
+      
+    const auto nvda_view     = nvda_table->committed_view();   // non-owning span
+    const auto* nvda_ptr = nvda_view.data();              // stable address under test
+    std::printf("[C++] NVDA MemTable buffer  @ %p  (%zu packets, %zu bytes)\n",
+                static_cast<const void*>(nvda_ptr),
+                nvda_view.size(),
+                nvda_view.size() * sizeof(zcpy::TelemetryPacket));
+    
+    
 
     return EXIT_SUCCESS;
 }

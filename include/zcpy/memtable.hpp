@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 
 // Forward-declare the cxx shared struct to decouple this header from the
 // generated "src/lib.rs.h". The full definition is pulled in by the .cpp TU.
@@ -25,7 +26,7 @@ inline constexpr std::size_t kDefaultCapacity = 4'096;
 /// Intended to be the hot-path staging layer ahead of an mmap flush region.
 class alignas(kCacheLineBytes) MemTable {
 public:
-    explicit MemTable(std::size_t capacity = kDefaultCapacity);
+    explicit MemTable(const std::string& filename, std::size_t capacity = kDefaultCapacity);
     ~MemTable();
 
     MemTable(const MemTable&)            = delete;

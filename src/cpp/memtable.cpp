@@ -15,8 +15,8 @@
 
 namespace zcpy {
 
-MemTable::MemTable(std::size_t capacity) : capacity_(capacity) {
-    int fd = open("memtable.bin", O_RDWR | O_CREAT, 0644);
+MemTable::MemTable(const std::string& filename, std::size_t capacity) : capacity_(capacity) {
+    int fd = open(filename.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
         throw std::bad_alloc{};
     }   
