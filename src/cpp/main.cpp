@@ -20,7 +20,7 @@ int main() {
     // Synthetic batch generation.
     const std::uint64_t base = 1'000'000'000ULL + table.size() * 1'000ULL;
     if (table.size() > 0) {
-        zcpy::seed_last_ts(table.data()[table.size() - 1].timestamp_ns);
+        zcpy::seed_last_ts(0, table.data()[table.size() - 1].timestamp_ns);
     }
 
     if (!zcpy::wal_startup_check()) {
@@ -65,7 +65,7 @@ int main() {
     // allocator on the Rust side.
     const rust::Slice<const zcpy::TelemetryPacket> rs_slice{view.data() + recovered, view.size() - recovered};
 
-    const std::size_t ingested = zcpy::ingest_packets(rs_slice);
+    const std::size_t ingested = zcpy::ingest_packets(0, rs_slice);
 
     // Rust prints its slice pointer to stderr above; it must match cpp_ptr.
     std::printf("[C++] ingest_packets   → %zu packets accepted\n", ingested);
@@ -78,7 +78,7 @@ int main() {
         {.timestamp_ns = 2'000'000'000ULL, .value = 1.0},
         {.timestamp_ns = 1'500'000'000ULL, .value = 2.0},
     };
-    const std::size_t r1 = zcpy::ingest_packets({out_of_order, 2});
+    const std::size_t r1 = zcpy::ingest_packets(0, {out_of_order, 2});
     std::printf("[C++] out-of-order batch → %zu accepted (expect 0)\n", r1);
 
     // 2. Internally ordered, but starts before the last accepted timestamp
@@ -87,7 +87,7 @@ int main() {
         {.timestamp_ns = 1'000'003'000ULL, .value = 3.0},
         {.timestamp_ns = 1'000'004'000ULL, .value = 4.0},
     };
-    const std::size_t r2 = zcpy::ingest_packets({stale, 2});
+    const std::size_t r2 = zcpy::ingest_packets(0, {stale, 2});
     std::printf("[C++] stale batch        → %zu accepted (expect 0)\n", r2);
 
     if (r1 != 0 || r2 != 0) {

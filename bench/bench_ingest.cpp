@@ -53,7 +53,7 @@ static void BM_IngestFull(benchmark::State& state) {
 
         // Ingest one packet at a time
         const rust::Slice<const zcpy::TelemetryPacket> one{table.data() + (counter - 1), 1};
-        zcpy::ingest_packets(one);
+        zcpy::ingest_packets(0, one);
 
         auto t_1 = std::chrono::steady_clock::now();
         latencies_ns.push_back((t_1 - t_0).count());

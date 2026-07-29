@@ -20,3 +20,7 @@ Makefile
 
 memtable.bin
 wal.bin
+amd.bin
+nvda.bin
+bench_ingest.bin
+bench_ingest_full.bin

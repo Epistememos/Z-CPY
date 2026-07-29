@@ -21,11 +21,14 @@ mod ffi {
         /// `rust::Slice<T>` is a fat pointer `{ ptr: *const T, len: usize }` —
         /// 16 bytes on the stack. The TelemetryPacket slab in the C++ MemTable
         /// is never touched by the allocator on the Rust side.
-        fn ingest_packets(packets: &[TelemetryPacket]) -> usize;
-        fn seed_last_ts(ts: u64);
+        //fn ingest_packets(packets: &[TelemetryPacket]) -> usize;
+        fn ingest_packets(stream_id: u32, packets: &[TelemetryPacket]) -> usize;
+        //fn seed_last_ts(ts: u64);
+        fn seed_last_ts(stream_id: u32, ts: u64);
         fn wal_startup_check() -> bool;
         fn wal_replay_len(memtable_count: usize) -> usize;
         fn wal_replay_packet(index: usize) -> TelemetryPacket;
+        
     }
 }
 
@@ -34,21 +37,23 @@ mod wal;
 
 pub use ffi::TelemetryPacket;
 
-use std::sync::atomic::{AtomicU64, Ordering};
-static LAST_TS: AtomicU64 = AtomicU64::new(0);
-static WAL_REPLAY: std::sync::Mutex<Vec<TelemetryPacket>> = std::sync::Mutex::new(Vec::new());
+use std::collections::HashMap;
+use std::sync::{Mutex, LazyLock};
 
+
+static WAL_REPLAY: std::sync::Mutex<Vec<TelemetryPacket>> = std::sync::Mutex::new(Vec::new());
+static LAST_TS_MAP: LazyLock<Mutex<HashMap<u32, u64>>> = LazyLock::new(|| { Mutex::new(HashMap::new())});
 
 /// Called by C++ via the cxx bridge. `packets` is a borrowed view into the
 /// C++ MemTable buffer; this frame allocates nothing.
-pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
-    let last_ts = LAST_TS.load(Ordering::Relaxed);
-    // // Print the Rust-side pointer address for the zero-copy proof in main.cpp.
-    // eprintln!(
-    //     "[Rust] ingest_packets  @ {:p}  ({} packets)",
-    //     packets.as_ptr(),
-    //     packets.len(),
-    // );
+pub fn ingest_packets(stream_id: u32, packets: &[ffi::TelemetryPacket]) -> usize {
+    // Acquire the lock for reading
+    let last_ts = {
+        let map = LAST_TS_MAP.lock().expect("Lock poisoned");
+        map.get(&stream_id).copied().unwrap_or(0)
+    };
+   
+
     let accepted = ingestion::process_batch(packets, last_ts);
     if accepted > 0 {
         let newest_ts = packets.last().unwrap();
@@ -56,14 +61,17 @@ pub fn ingest_packets(packets: &[ffi::TelemetryPacket]) -> usize {
             eprintln!("[Rust] ERROR: failed to append to WAL");
             return 0;
         }
-        LAST_TS.store(newest_ts.timestamp_ns, Ordering::Relaxed);
     
+        let mut map = LAST_TS_MAP.lock().expect("Lock poisoned");
+        map.insert(stream_id, newest_ts.timestamp_ns);
     }
+        
     accepted
 }
 
-pub fn seed_last_ts(ts: u64) {
-    LAST_TS.store(ts, Ordering::Relaxed);
+pub fn seed_last_ts(stream_id: u32, ts: u64) {
+    let mut map = LAST_TS_MAP.lock().expect("Lock poisoned");
+    map.insert(stream_id, ts);
 }
 
 pub fn wal_startup_check() -> bool {

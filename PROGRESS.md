@@ -5,6 +5,16 @@ Newest first.
 
 ---
 
+## 2026-07-28 — Per-stream LAST_TS gate on the Rust side
+
+**Built:** `ingest_packets` and `seed_last_ts` both gained a `stream_id: u32` parameter — chose an integer over a string key since streams can be many instances of "the same kind of thing" (no natural unique name) and hashing a `u32` is cheaper than hashing a string on a per-packet hot path. `LAST_TS` (a single global `AtomicU64`) was replaced with `LAST_TS_MAP: LazyLock<Mutex<HashMap<u32, u64>>>` — keyed by stream, one high-water mark per stream instead of one for the whole process. `LazyLock` was necessary rather than a plain `static` initializer because `HashMap::new()` isn't a `const fn` (its default hasher seeds itself with runtime randomness), unlike `Vec::new()`.
+
+**Bug caught before it shipped:** an early draft read the map (`.lock()`) and then, later in the same function, locked it again while the first `MutexGuard` was still in scope — `std::sync::Mutex` isn't reentrant, so this would have deadlocked (hung forever, not panicked) the first time `ingest_packets` accepted a batch. Fixed by wrapping the read in its own nested block so the guard drops before the second lock.
+
+**Verified:** rebuilt with all five C++ call sites (`main.cpp` ×4, `bench_ingest.cpp` ×1) updated to pass `stream_id = 0` for the existing single-stream flow; full run — recovery, WAL replay, ingest, both adversarial validation tests, range query — behaves identically to before.
+
+**Known gap, not yet fixed:** the WAL (`wal.rs`) is still one global `wal.bin` file. AMD and NVDA now have separate `MemTable`s and separate `LAST_TS` gates, but would still share one WAL file if routed through `ingest_packets` today — that's the next step.
+
 ## 2026-07-27 — Multi-stream proof: per-stream MemTable isolation
 
 **Built:** `MemTable`'s constructor now takes a filename (`const std::string&`) instead of hardcoding `"memtable.bin"` — `MemTable(const std::string& filename, std::size_t capacity = kDefaultCapacity)`. Since `MemTable` can't be copied or moved (deleted constructors), multiple instances are held via `std::unique_ptr`. `main.cpp` now constructs two independent streams (`amd.bin`, `nvda.bin`) alongside the original table, emplaces into each, and prints all three buffer addresses — confirmed three distinct addresses, three distinct files, no shared state.

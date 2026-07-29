@@ -91,7 +91,8 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Cached the WAL file handle across calls instead of reopening every append — cut p99 8x (48.0 ms → 6.07 ms)
 - [ ] Batch fsyncs across multiple writes (group commit) — the remaining cost is the fsync syscall itself
 - [x] Multi-stream proof: `MemTable` takes a filename, multiple independent instances via `unique_ptr` (C++-level isolation only)
-- [ ] Per-stream `LAST_TS` gate and WAL — `ingest_packets`/WAL are still global on the Rust side, not yet stream-aware
+- [x] Per-stream `LAST_TS` gate — `ingest_packets`/`seed_last_ts` take a `stream_id: u32`, gate is a `HashMap<u32, u64>` keyed by stream
+- [ ] Per-stream WAL — `wal.rs` still writes one global `wal.bin`, not yet stream-aware
 - [ ] Stateful `Ingester` handle over the bridge (multi-stream support)
 
 ## Progress log
