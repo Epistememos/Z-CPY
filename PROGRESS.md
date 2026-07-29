@@ -5,6 +5,16 @@ Newest first.
 
 ---
 
+## 2026-07-29 — Per-stream WAL: multi-stream support fully wired end-to-end
+
+**Built:** `wal.rs`'s three functions (`append`, `torn_tail_detection`, `replay`) all gained a `stream_id: u32` parameter and now derive a per-stream filename (`format!("wal_{}.bin", stream_id)`) instead of the hardcoded `"wal.bin"`. The single cached `WAL_FILE: Mutex<Option<File>>` was replaced with `WAL_MAP: LazyLock<Mutex<HashMap<u32, File>>>` — one open file handle per stream, all behind one lock. `WAL_REPLAY` in `lib.rs` became `WAL_REPLAY_MAP: LazyLock<Mutex<HashMap<u32, Vec<TelemetryPacket>>>>` for the same reason — a single shared replay buffer would let one stream's `wal_replay_len` call silently overwrite another's before `wal_replay_packet` read it back.
+
+**Bug caught before it shipped:** an early draft of `wal_replay_len` tried to `get_mut` a stream's entry from the map *before* ever inserting it — always `None`, always panics on `.unwrap()`. Not a compile error — a runtime-only bug, since `Option::unwrap()` on `None` is only checked when the code actually runs. Fixed by capturing the length from the freshly-computed `Vec` directly, then inserting it into the map, instead of inserting and immediately reading back out.
+
+**Design note on locking:** `WAL_MAP` uses one lock for the whole map rather than a lock per stream. This means two streams' WAL writes serialize behind each other even though they're logically independent — a real bottleneck under concurrent multi-threaded ingestion, but a non-issue today under the documented single-producer contract (one thread, one stream at a time). Documented as a known future optimization (nested per-stream locks behind a fast outer lookup) rather than built now, since building it today would optimize for a workload that doesn't exist yet.
+
+**Verified:** full run — recovery, WAL replay, ingest, both adversarial validation tests, range query, and both isolated AMD/NVDA streams — all pass with `stream_id` threaded through every layer (`MemTable`, `LAST_TS_MAP`, `WAL_MAP`, `WAL_REPLAY_MAP`).
+
 ## 2026-07-28 — Per-stream LAST_TS gate on the Rust side
 
 **Built:** `ingest_packets` and `seed_last_ts` both gained a `stream_id: u32` parameter — chose an integer over a string key since streams can be many instances of "the same kind of thing" (no natural unique name) and hashing a `u32` is cheaper than hashing a string on a per-packet hot path. `LAST_TS` (a single global `AtomicU64`) was replaced with `LAST_TS_MAP: LazyLock<Mutex<HashMap<u32, u64>>>` — keyed by stream, one high-water mark per stream instead of one for the whole process. `LazyLock` was necessary rather than a plain `static` initializer because `HashMap::new()` isn't a `const fn` (its default hasher seeds itself with runtime randomness), unlike `Vec::new()`.

@@ -92,8 +92,8 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [ ] Batch fsyncs across multiple writes (group commit) — the remaining cost is the fsync syscall itself
 - [x] Multi-stream proof: `MemTable` takes a filename, multiple independent instances via `unique_ptr` (C++-level isolation only)
 - [x] Per-stream `LAST_TS` gate — `ingest_packets`/`seed_last_ts` take a `stream_id: u32`, gate is a `HashMap<u32, u64>` keyed by stream
-- [ ] Per-stream WAL — `wal.rs` still writes one global `wal.bin`, not yet stream-aware
-- [ ] Stateful `Ingester` handle over the bridge (multi-stream support)
+- [x] Per-stream WAL — `append`/`torn_tail_detection`/`replay` take a `stream_id: u32`, each stream gets its own `wal_<id>.bin`
+- [ ] Stateful `Ingester` handle over the bridge (ergonomic multi-stream API, replacing raw `stream_id` plumbing)
 
 ## Progress log
 

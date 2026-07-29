@@ -23,15 +23,15 @@ int main() {
         zcpy::seed_last_ts(0, table.data()[table.size() - 1].timestamp_ns);
     }
 
-    if (!zcpy::wal_startup_check()) {
+    if (!zcpy::wal_startup_check(0)) {
         std::fputs("[C++] WAL repair failed\n", stderr);
         return EXIT_FAILURE;
     }
 
     // WAL replay.
-    const std::size_t replay_count = zcpy::wal_replay_len(table.size());
+    const std::size_t replay_count = zcpy::wal_replay_len(0, table.size());
     for (std::size_t i = 0; i < replay_count; ++i) {
-        const auto pkt = zcpy::wal_replay_packet(i);
+        const auto pkt = zcpy::wal_replay_packet(0, i);
         table.emplace(pkt.timestamp_ns, pkt.value);
     }
     if (replay_count > 0) {

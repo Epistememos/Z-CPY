@@ -25,9 +25,9 @@ mod ffi {
         fn ingest_packets(stream_id: u32, packets: &[TelemetryPacket]) -> usize;
         //fn seed_last_ts(ts: u64);
         fn seed_last_ts(stream_id: u32, ts: u64);
-        fn wal_startup_check() -> bool;
-        fn wal_replay_len(memtable_count: usize) -> usize;
-        fn wal_replay_packet(index: usize) -> TelemetryPacket;
+        fn wal_startup_check(stream_id: u32) -> bool;
+        fn wal_replay_len(stream_id: u32, memtable_count: usize) -> usize;
+        fn wal_replay_packet(stream_id: u32, index: usize) -> TelemetryPacket;
         
     }
 }
@@ -41,7 +41,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, LazyLock};
 
 
-static WAL_REPLAY: std::sync::Mutex<Vec<TelemetryPacket>> = std::sync::Mutex::new(Vec::new());
+static WAL_REPLAY_MAP: LazyLock<Mutex<HashMap<u32, Vec<TelemetryPacket>>>> = LazyLock::new(|| {Mutex::new(HashMap::new())});
 static LAST_TS_MAP: LazyLock<Mutex<HashMap<u32, u64>>> = LazyLock::new(|| { Mutex::new(HashMap::new())});
 
 /// Called by C++ via the cxx bridge. `packets` is a borrowed view into the
@@ -57,7 +57,7 @@ pub fn ingest_packets(stream_id: u32, packets: &[ffi::TelemetryPacket]) -> usize
     let accepted = ingestion::process_batch(packets, last_ts);
     if accepted > 0 {
         let newest_ts = packets.last().unwrap();
-        if !wal::append(&packets[..accepted]) {
+        if !wal::append(stream_id, &packets[..accepted]) {
             eprintln!("[Rust] ERROR: failed to append to WAL");
             return 0;
         }
@@ -74,21 +74,26 @@ pub fn seed_last_ts(stream_id: u32, ts: u64) {
     map.insert(stream_id, ts);
 }
 
-pub fn wal_startup_check() -> bool {
-    wal::torn_tail_detection()
+pub fn wal_startup_check(stream_id: u32) -> bool {
+    wal::torn_tail_detection(stream_id)
 }
 
-pub fn wal_replay_len(memtable_count: usize) -> usize {
-    let replayed = match wal::replay(memtable_count) {
+pub fn wal_replay_len(stream_id: u32, memtable_count: usize) -> usize {
+    
+    let replayed = match wal::replay(stream_id, memtable_count) {
         Some(packets) => packets,
         None => return 0,
     };
-    let mut guard = WAL_REPLAY.lock().unwrap();
-    *guard = replayed;
-    guard.len()
+    let mut replay_map = WAL_REPLAY_MAP.lock().expect("Lock poisoned.");
+    
+    
+    let len = replayed.len();
+    replay_map.insert(stream_id, replayed);
+    len
 }
 
-pub fn wal_replay_packet(index: usize) -> TelemetryPacket {
-    let guard = WAL_REPLAY.lock().unwrap();
-    guard[index]
+pub fn wal_replay_packet(stream_id: u32, index: usize) -> TelemetryPacket {
+    let replay_map = WAL_REPLAY_MAP.lock().expect("Lock poisoned.");
+    let replay = replay_map.get(&stream_id).unwrap();
+    replay[index]
 }

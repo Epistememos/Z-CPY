@@ -19,7 +19,7 @@ Makefile
 .DS_Store
 
 memtable.bin
-wal.bin
+wal_*.bin
 amd.bin
 nvda.bin
 bench_ingest.bin

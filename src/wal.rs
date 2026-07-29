@@ -1,20 +1,27 @@
 use crate::ffi::TelemetryPacket;
-use std::fs::OpenOptions;
 use std::io::Write;
+use std::collections::HashMap;
+use std::sync::{Mutex, LazyLock};
+use std::fs::{File, OpenOptions};
 
-pub fn append(packets: &[TelemetryPacket]) -> bool {
+static WAL_MAP: LazyLock<Mutex<HashMap<u32, File>>> = LazyLock::new(|| { Mutex::new(HashMap::new())});
+
+pub fn append(stream_id: u32, packets: &[TelemetryPacket]) -> bool {
     // Appends a batch of packets to the WAL file. Returns true on success, false on failure.
     //
-    static WAL_FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
-    let mut guard = WAL_FILE.lock().unwrap();
-    if guard.is_none() {
-        *guard = match OpenOptions::new().create(true).append(true).open("wal.bin") {
-        Ok(f) => Some(f),
-        Err(_) => return false,
-        };
+    let mut map = WAL_MAP.lock().expect("Lock poisoned");
+    if !map.contains_key(&stream_id) {
+        let filename = format!("wal_{}.bin", stream_id);
+        // Create file and insert into wal map
+        match OpenOptions::new().create(true).append(true).open(&filename) {
+            Ok(f) => {map.insert(stream_id,f); }
+            Err(_) => return false,
+        }
     }
+
+    let file = map.get_mut(&stream_id).unwrap();
     
-    let file = guard.as_mut().unwrap();
+
    
     // TelemetryPacket is #[repr(C)] and trivially copyable, so we can safely treat the slice as a byte slice.
     let bytes = unsafe {
@@ -33,8 +40,9 @@ pub fn append(packets: &[TelemetryPacket]) -> bool {
     true
 }
 
-pub fn torn_tail_detection() -> bool {
-    let file = match OpenOptions::new().write(true).open("wal.bin") {
+pub fn torn_tail_detection(stream_id: u32) -> bool {
+    let filename = format!("wal_{}.bin", stream_id);
+    let file = match OpenOptions::new().write(true).open(&filename) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return true,
         Err(_) => return false,
@@ -56,8 +64,9 @@ pub fn torn_tail_detection() -> bool {
     true
 }
 
-pub fn replay(memtable_count: usize) -> Option<Vec<TelemetryPacket>> {
-    let bytes: Vec<u8> = match std::fs::read("wal.bin") {
+pub fn replay(stream_id: u32, memtable_count: usize) -> Option<Vec<TelemetryPacket>> {
+    let filename = format!("wal_{}.bin", stream_id);
+    let bytes: Vec<u8> = match std::fs::read(&filename) {
     Ok(b) => b,
     Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Some(vec![]),
     Err(_) => return None,
