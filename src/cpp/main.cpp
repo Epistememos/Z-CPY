@@ -116,22 +116,28 @@ int main() {
         }
     }
 
+   
     const auto amd_view     = amd_table->committed_view();   // non-owning span
+    const rust::Slice<const zcpy::TelemetryPacket> amd_slice{amd_view.data() , amd_view.size()};
+    const std::size_t amd_stream = zcpy::ingest_packets(1, amd_slice);
     const auto* amd_ptr = amd_view.data();              // stable address under test
     std::printf("[C++] AMD MemTable buffer  @ %p  (%zu packets, %zu bytes)\n",
                 static_cast<const void*>(amd_ptr),
                 amd_view.size(),
                 amd_view.size() * sizeof(zcpy::TelemetryPacket));
 
-      
-    const auto nvda_view     = nvda_table->committed_view();   // non-owning span
+    const auto nvda_view     = nvda_table->committed_view();  
+    const rust::Slice<const zcpy::TelemetryPacket> nvda_slice{nvda_view.data() , nvda_view.size()};
+    const std::size_t nvda_stream = zcpy::ingest_packets(2, nvda_slice);
+     // non-owning span
     const auto* nvda_ptr = nvda_view.data();              // stable address under test
     std::printf("[C++] NVDA MemTable buffer  @ %p  (%zu packets, %zu bytes)\n",
                 static_cast<const void*>(nvda_ptr),
                 nvda_view.size(),
                 nvda_view.size() * sizeof(zcpy::TelemetryPacket));
     
-    
+    std::printf("[C++] AMD ingest_packets  → %zu accepted\n", amd_stream);
+    std::printf("[C++] NVDA ingest_packets  → %zu accepted\n", nvda_stream);
 
     return EXIT_SUCCESS;
 }

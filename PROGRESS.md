@@ -5,6 +5,14 @@ Newest first.
 
 ---
 
+## 2026-07-29 — AMD/NVDA end-to-end proof: two live streams through the full stack
+
+**Built:** `main.cpp`'s AMD/NVDA blocks now exercise the complete path, not just `MemTable`-level isolation: `emplace` 64 packets into each table, build a `rust::Slice` from each table's own `committed_view()`, and call `zcpy::ingest_packets` with distinct stream IDs (AMD = `1`, NVDA = `2`). Both streams validated and accepted all 64 packets independently — proving `LAST_TS_MAP` and the per-stream WAL genuinely don't interfere with each other, not just that they're structurally separate.
+
+**Bugs caught while wiring this up:** (1) tried calling `ingest_packets` as a `MemTable` method (`amd_table->ingest_packets(...)`) — it's a free function from the Rust bridge, not something `MemTable` knows how to do; (2) passed the leftover adversarial-test array (`stale`) instead of each table's own freshly-emplaced data — would have validated data that was never actually written to either table; (3) used `->` instead of `.` on `std::span` values (`committed_view()` returns a value, not a pointer — only `unique_ptr<MemTable>` needs `->`); (4) passed AMD's stream ID (`1`) to NVDA's `ingest_packets` call — a silent correctness bug the compiler can't catch, exactly the fragility of manually keeping a `MemTable` and its `stream_id` in sync by convention rather than by structure.
+
+**Design note:** that last bug is the concrete case for the `Ingester` handle already on the roadmap — bundling a `MemTable` and its `stream_id` into one object would make this class of mistake impossible instead of just avoidable.
+
 ## 2026-07-29 — Per-stream WAL: multi-stream support fully wired end-to-end
 
 **Built:** `wal.rs`'s three functions (`append`, `torn_tail_detection`, `replay`) all gained a `stream_id: u32` parameter and now derive a per-stream filename (`format!("wal_{}.bin", stream_id)`) instead of the hardcoded `"wal.bin"`. The single cached `WAL_FILE: Mutex<Option<File>>` was replaced with `WAL_MAP: LazyLock<Mutex<HashMap<u32, File>>>` — one open file handle per stream, all behind one lock. `WAL_REPLAY` in `lib.rs` became `WAL_REPLAY_MAP: LazyLock<Mutex<HashMap<u32, Vec<TelemetryPacket>>>>` for the same reason — a single shared replay buffer would let one stream's `wal_replay_len` call silently overwrite another's before `wal_replay_packet` read it back.
