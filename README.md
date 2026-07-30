@@ -86,6 +86,7 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] **Write-ahead log** — append-before-acknowledge with fsync; torn-tail detection and repair on startup; crash replay rebuilds memtable from WAL when memtable is missing or incomplete
 - [ ] High-water-mark flush signal (background compaction trigger)
 - [x] Read path: binary-searched time-range scans over the mmap (zero-copy reads)
+- [x] Read-path benchmark: `MemTable::query` — 81.1 ns mean, 125 ns p99 over 5M packets
 - [x] Write-path benchmark (Google Benchmark, C++): `MemTable::emplace` — 29.3 ns mean, 42 ns p99
 - [x] Full-path benchmark: `emplace` + `ingest_packets` (FFI + validation + WAL fsync) — 128 µs mean, 6.07 ms p99
 - [x] Cached the WAL file handle across calls instead of reopening every append — cut p99 8x (48.0 ms → 6.07 ms)

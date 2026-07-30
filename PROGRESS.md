@@ -5,6 +5,14 @@ Newest first.
 
 ---
 
+## 2026-07-29 — Read-path benchmark: BM_Query closes the performance story
+
+**Built:** `BM_Query` in `bench_ingest.cpp` — fills a table with 5,000,000 packets (timestamps starting at `1`, never `0`, since `0` is the recovery-scan sentinel for "empty slot"), then times `MemTable::query` doing a binary-search time-range lookup against that dataset. Result: 81.1 ns mean, 125 ns p99.
+
+**Bugs caught while writing it:** (1) a malformed `for` loop header (`100000, 1` isn't a valid condition); (2) the fill loop never advanced its own counter, so every packet would have gotten the identical timestamp; (3) the query range wasn't scaled to match the stored timestamps (multiples of 1,000), so it would have searched an empty range every call; (4) starting the fill loop at `0` instead of `1` — would have collided with the zero-timestamp recovery sentinel; (5) `query()`'s return value was discarded, triggering a `[[nodiscard]]` warning and risking dead-code elimination — fixed with `benchmark::DoNotOptimize`.
+
+**Result — the full performance picture is now three numbers:** write path (`emplace`, 28.7 ns mean / 42 ns p99), read path (`query`, 81.1 ns mean / 125 ns p99), and durable ingest (`emplace` + `ingest_packets` with WAL fsync, 225 µs mean / 6.17 ms p99). Write and read are both sub-microsecond, consistent with `O(log n)` binary search over 5M entries (~22 comparisons); only the fsync-durable path pays real disk I/O cost.
+
 ## 2026-07-29 — AMD/NVDA end-to-end proof: two live streams through the full stack
 
 **Built:** `main.cpp`'s AMD/NVDA blocks now exercise the complete path, not just `MemTable`-level isolation: `emplace` 64 packets into each table, build a `rust::Slice` from each table's own `committed_view()`, and call `zcpy::ingest_packets` with distinct stream IDs (AMD = `1`, NVDA = `2`). Both streams validated and accepted all 64 packets independently — proving `LAST_TS_MAP` and the per-stream WAL genuinely don't interfere with each other, not just that they're structurally separate.

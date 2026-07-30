@@ -24,3 +24,4 @@ amd.bin
 nvda.bin
 bench_ingest.bin
 bench_ingest_full.bin
+bench_query.bin
