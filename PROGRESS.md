@@ -5,6 +5,16 @@ Newest first.
 
 ---
 
+## 2026-07-29 — Group commit proven: batching amortizes the fsync floor ~100x
+
+**Built:** `BM_IngestBatch` — ingests 100 packets per `ingest_packets` call instead of 1, dividing each measured latency by `kBatchSize` before storing it, so the resulting p99 reflects *effective per-packet cost* rather than per-call cost. No new WAL code was needed: `wal::append` already takes a `&[TelemetryPacket]` slice and does exactly one `write_all` + one `sync_all` for the whole slice, regardless of how many packets are in it — group commit was already the mechanism, just never benchmarked with a realistic batch size before today.
+
+**Result:** effective per-packet p99 dropped from 6.04 ms (`BM_IngestFull`, 1 packet/call) to 60.5 µs (`BM_IngestBatch`, 100 packets/call) — a ~100x reduction. Mean per-packet cost dropped by roughly the same ratio (133 µs → ~1.3 µs, once `BM_IngestBatch`'s raw `CPU` figure is manually divided by 100). Confirms the fsync floor is a fixed per-call cost, not proportional to payload size — spreading it across more packets shrinks the effective per-packet cost almost linearly with batch size.
+
+**Bugs caught along the way:** (1) Google Benchmark auto-calibrates by calling the benchmark function multiple times before settling on an iteration count — each call resets local variables like `counter`, but `LAST_TS_MAP` is a process-wide static that doesn't reset between those calls, causing spurious rejections. Fixed the same way as the other benchmarks: pin `->Iterations(N)` to skip calibration. (2) `BM_IngestBatch` initially reused `BM_IngestFull`'s file (`bench_ingest_full.bin`) — since all benchmarks run in one process, `MemTable`'s recovery scan picked up thousands of leftover packets, misaligning the slice-offset math (`counter`-based, assumed an empty table) against the actual slot indices `emplace` returned. Fixed by giving it its own dedicated file.
+
+**Clarified along the way:** `Time`/`CPU` (Google Benchmark's own columns) always measure cost *per loop iteration*, with zero awareness of what's inside that iteration — they don't automatically divide by batch size. `p99_ns` is a fully custom metric: every value in `latencies_ns` is manually divided by `kBatchSize` at insertion time, before sorting and taking the percentile. Two independent measurement systems reported side by side in the same output row, not the same number processed twice.
+
 ## 2026-07-29 — Read-path benchmark: BM_Query closes the performance story
 
 **Built:** `BM_Query` in `bench_ingest.cpp` — fills a table with 5,000,000 packets (timestamps starting at `1`, never `0`, since `0` is the recovery-scan sentinel for "empty slot"), then times `MemTable::query` doing a binary-search time-range lookup against that dataset. Result: 81.1 ns mean, 125 ns p99.

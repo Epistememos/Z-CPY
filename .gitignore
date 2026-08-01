@@ -25,3 +25,4 @@ nvda.bin
 bench_ingest.bin
 bench_ingest_full.bin
 bench_query.bin
+bench_ingest_batch.bin
