@@ -5,6 +5,14 @@ Newest first.
 
 ---
 
+## 2026-08-01 — `Ingester`: bundling MemTable + stream_id into one object
+
+**Built:** a new class, `zcpy::Ingester` (`include/zcpy/ingester.hpp`, `src/cpp/ingester.cpp`), owning a `MemTable` and a `const uint32_t stream_id_` together. Exposes `emplace(timestamp_ns, value)` and `ingest()` — the latter internally slices only the packets not yet submitted (tracked via a private `ingested_count_`, seeded from `table_.size()` at construction so recovered packets from a prior run aren't resubmitted) and calls `zcpy::ingest_packets(stream_id_, slice)`. Callers never type a raw `stream_id` again. `main.cpp`'s AMD/NVDA blocks were rewritten around it: `zcpy::Ingester amd{"amd.bin", 64, 1};` replaces the old `unique_ptr<MemTable>` + manual slice-building + manually-typed stream ID at every call site.
+
+**Why this exists:** a session ago, `main.cpp` had a real bug — NVDA's batch was accidentally validated against AMD's `stream_id`. The compiler didn't catch it because nothing linked a `MemTable` to its `stream_id`; they were just two separately-typed values kept in sync by convention. `Ingester` makes that mismatch structurally impossible: there's only one object to reason about per stream, and its `ingest()` method always uses its own `stream_id_`.
+
+**C++ mechanics reinforced along the way:** member initialization order always follows *declaration* order in the class, not the order written in the initializer list — this is why `ingested_count_` (needing `table_.size()`) must be declared *after* `table_` in the header. Also: `stream_id_` was made `const` since it's set once at construction and never mutated again — no atomic needed, since atomics only matter for values that are *written* concurrently, and this one never is after construction.
+
 ## 2026-07-29 — Group commit proven: batching amortizes the fsync floor ~100x
 
 **Built:** `BM_IngestBatch` — ingests 100 packets per `ingest_packets` call instead of 1, dividing each measured latency by `kBatchSize` before storing it, so the resulting p99 reflects *effective per-packet cost* rather than per-call cost. No new WAL code was needed: `wal::append` already takes a `&[TelemetryPacket]` slice and does exactly one `write_all` + one `sync_all` for the whole slice, regardless of how many packets are in it — group commit was already the mechanism, just never benchmarked with a realistic batch size before today.

@@ -95,7 +95,7 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Per-stream `LAST_TS` gate — `ingest_packets`/`seed_last_ts` take a `stream_id: u32`, gate is a `HashMap<u32, u64>` keyed by stream
 - [x] Per-stream WAL — `append`/`torn_tail_detection`/`replay` take a `stream_id: u32`, each stream gets its own `wal_<id>.bin`
 - [x] Multi-stream end-to-end proof — two live streams (AMD, NVDA), each fully validated and WAL'd independently through `ingest_packets`
-- [ ] Stateful `Ingester` handle over the bridge — bundle `MemTable` + `stream_id` into one object so they can't be mismatched by mistake
+- [x] Stateful `Ingester` handle — bundles `MemTable` + `stream_id` into one object; `emplace`/`ingest()` never expose a raw `stream_id` to callers
 
 ## Progress log
 
