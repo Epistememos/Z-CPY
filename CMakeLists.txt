@@ -51,6 +51,12 @@ target_compile_options(zcpy_engine PRIVATE
     -march=native
     -fstrict-aliasing
 )
+option(ZCPY_ENABLE_TSAN "Build zcpy_engine with ThreadSanitizer" OFF)
+if(ZCPY_ENABLE_TSAN)
+    target_compile_options(zcpy_engine PRIVATE -fsanitize=thread)
+    target_link_options(zcpy_engine PRIVATE -fsanitize=thread)
+endif()
+
 
 target_include_directories(zcpy_engine PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include

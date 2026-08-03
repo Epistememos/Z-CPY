@@ -96,6 +96,8 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Per-stream WAL — `append`/`torn_tail_detection`/`replay` take a `stream_id: u32`, each stream gets its own `wal_<id>.bin`
 - [x] Multi-stream end-to-end proof — two live streams (AMD, NVDA), each fully validated and WAL'd independently through `ingest_packets`
 - [x] Stateful `Ingester` handle — bundles `MemTable` + `stream_id` into one object; `emplace`/`ingest()` never expose a raw `stream_id` to callers
+- [x] Found a real data race under concurrency (ThreadSanitizer-verified, `ZCPY_ENABLE_TSAN` CMake option) — `Ingester::ingest()`'s unsynchronized counter causes a stuck-loop bug under concurrent callers
+- [ ] Lock-free MPSC queue + single dedicated writer thread (single-writer principle, LMAX Disruptor pattern) — the real fix; a mutex would work but undercuts the lock-free goal
 
 ## Progress log
 

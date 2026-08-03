@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
+
 
 int main() {
     constexpr std::size_t kBatchSize = 8;
@@ -99,11 +101,11 @@ int main() {
     const auto results = table.query(base, base + 3'000ULL);
     std::printf("[C++] query [base, base+3µs] → %zu packets\n", results.size());
 
-    zcpy::Ingester amd{"amd.bin", 64, 1};
+    zcpy::Ingester test{"test.bin", 10000, 1};
     zcpy::Ingester nvda{"nvda.bin", 128, 2};
 
     for (std::uint64_t i = 0; i < 64; ++i) {
-        const bool amd_emplace = amd.emplace(
+        const bool test_emplace = test.emplace(
             base + i * 1'000ULL,          // t0 + i * 1 microsecond
             static_cast<double>(i) * 0.1  // synthetic signal ramp
         );
@@ -111,17 +113,17 @@ int main() {
             base + i * 1'000ULL,          // t0 + i * 1 microsecond
             static_cast<double>(i) * 0.1  // synthetic signal ramp
         );
-        if (!amd_emplace || !nvda_emplace) {
+        if (!test_emplace || !nvda_emplace) {
             std::fputs("[C++] MemTable overflow — raise kBatchSize\n", stderr);
             return EXIT_FAILURE;
         }
     }
 
    
-    const std::size_t amd_ingest = amd.ingest();
-    std::printf("[C++] AMD MemTable buffer  with  (%zu packets, %zu bytes)\n",
-                amd_ingest,
-                amd_ingest * sizeof(zcpy::TelemetryPacket));
+    const std::size_t test_ingest = test.ingest();
+    std::printf("[C++] TEST MemTable buffer  with  (%zu packets, %zu bytes)\n",
+                test_ingest,
+                test_ingest * sizeof(zcpy::TelemetryPacket));
 
     const std::size_t nvda_ingest = nvda.ingest();
      // non-owning span             // stable address under test
@@ -129,8 +131,43 @@ int main() {
                 nvda_ingest,
                 nvda_ingest * sizeof(zcpy::TelemetryPacket));
     
-    std::printf("[C++] AMD ingest_packets  → %zu accepted\n", amd_ingest);
+    std::printf("[C++] TEST ingest_packets  → %zu accepted\n", test_ingest);
     std::printf("[C++] NVDA ingest_packets  → %zu accepted\n", nvda_ingest);
+
+    std::thread t1 ([&test, &base]() {
+         for (std::uint64_t i = 0; i < 1000; ++i) {
+        test.emplace(
+            base + i * 1'000ULL,          // t0 + i * 1 microsecond
+            static_cast<double>(i) * 0.1  // synthetic signal ramp
+        );
+        test.ingest();
+        }
+    });
+
+    std::thread t2 ([&test, &base]() {
+         for (std::uint64_t i = 0; i < 1000; ++i) {
+        test.emplace(
+            base + i * 1'000ULL,          // t0 + i * 1 microsecond
+            static_cast<double>(i) * 0.1  // synthetic signal ramp
+        );
+        test.ingest();
+        }
+    });
+
+    std::thread t3 ([&test, &base]() {
+         for (std::uint64_t i = 0; i < 1000; ++i) {
+        test.emplace(
+            base + i * 1'000ULL,          // t0 + i * 1 microsecond
+            static_cast<double>(i) * 0.1  // synthetic signal ramp
+        );
+        test.ingest();
+        }
+    });
+    
+
+    t1.join();
+    t2.join();
+    t3.join();
 
     return EXIT_SUCCESS;
 }

@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include <cstddef>
+#include <mutex>
 #include "zcpy/memtable.hpp"
 
 namespace zcpy {
@@ -15,5 +16,6 @@ namespace zcpy {
         zcpy::MemTable table_;
         uint32_t stream_id_;
         std::size_t ingested_count_;
+        std::mutex ingest_mutex_;
     };
 }

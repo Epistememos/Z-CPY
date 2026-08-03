@@ -5,6 +5,18 @@ Newest first.
 
 ---
 
+## 2026-08-02 — Found a real data race under concurrency, before it shipped
+
+**Built:** a multi-threaded stress test in `main.cpp` — three `std::thread`s, each looping `emplace`/`ingest()` calls against the *same* `Ingester` concurrently. Added `-fsanitize=thread` support via a new CMake option, `ZCPY_ENABLE_TSAN` (default `OFF`, since ThreadSanitizer roughly doubles memory use and slows execution 5-15x — not something to leave on by default). Verified the option works from a completely clean `rm -rf build` reconfigure, not just a stale cached command-line flag.
+
+**Bug found — and it was loud enough to see without even needing the sanitizer report:** `Ingester::ingest()`'s `ingested_count_` is a plain `std::size_t`, unsynchronized. Concurrent threads calling `ingest()` could all read the same stale count before any of them updated it, causing a lost update — the counter got stuck, and every subsequent call resubmitted the same already-processed slice forever, visible as thousands of identical repeated `non-monotonic timestamp` rejections in the output.
+
+**Fixed:** added `ingest_mutex_` (`std::mutex`) to `Ingester` and wrapped `ingest()`'s entire read-check-submit-update sequence in a `std::lock_guard`, so only one thread can execute that critical section at a time. This resolves the specific lost-update race.
+
+**Deeper problem identified, not yet fixed:** the mutex doesn't address a separate issue — `MemTable::emplace`'s atomic slot-claim (`size_.fetch_add`) guarantees memory safety (no two threads ever write the same slot) but says nothing about *timestamp order*. Concurrent producers could get slots assigned in an order that doesn't match their timestamps, silently breaking the sorted-array invariant `query()`'s binary search depends on — a correctness bug ThreadSanitizer can't catch, since no memory is unsafely shared.
+
+**Direction chosen:** rather than patch this with a mutex (which would undercut the whole "lock-free multi-producer" goal), decided to build toward the single-writer principle — the pattern used in the LMAX Disruptor architecture. Multiple producer threads push into a lock-free MPSC queue (reusing the same atomic-fetch-add slot-claim pattern already proven safe in `MemTable::emplace`); a single dedicated writer thread drains it and performs the actual `emplace`/`ingest()` calls sequentially, guaranteeing order without ever blocking producers. Staged as: (1) build the queue's producer side only, bounded, no wraparound; (2) add the dedicated writer thread; (3) add ring-buffer wraparound for indefinite operation.
+
 ## 2026-08-01 — `Ingester`: bundling MemTable + stream_id into one object
 
 **Built:** a new class, `zcpy::Ingester` (`include/zcpy/ingester.hpp`, `src/cpp/ingester.cpp`), owning a `MemTable` and a `const uint32_t stream_id_` together. Exposes `emplace(timestamp_ns, value)` and `ingest()` — the latter internally slices only the packets not yet submitted (tracked via a private `ingested_count_`, seeded from `table_.size()` at construction so recovered packets from a prior run aren't resubmitted) and calls `zcpy::ingest_packets(stream_id_, slice)`. Callers never type a raw `stream_id` again. `main.cpp`'s AMD/NVDA blocks were rewritten around it: `zcpy::Ingester amd{"amd.bin", 64, 1};` replaces the old `unique_ptr<MemTable>` + manual slice-building + manually-typed stream ID at every call site.

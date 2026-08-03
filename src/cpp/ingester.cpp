@@ -12,6 +12,7 @@ namespace zcpy {
     }
 
     std::size_t Ingester::ingest() {
+        std::lock_guard<std::mutex> lock(ingest_mutex_);
         const auto view = table_.committed_view();
         const rust::Slice<const zcpy::TelemetryPacket> slice{view.data() + ingested_count_, view.size() - ingested_count_};
        
