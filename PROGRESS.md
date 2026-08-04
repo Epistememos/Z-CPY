@@ -5,6 +5,16 @@ Newest first.
 
 ---
 
+## 2026-08-03 — LockFreeQueue scaffolded: producer-side push, no wraparound
+
+**Built:** `zcpy::LockFreeQueue` (`include/zcpy/queue.hpp`, `src/cpp/queue.cpp`) — stage 1 of the single-writer-principle plan from last session. Fixed-capacity `std::vector<TelemetryPacket>` storage, an `std::atomic<std::size_t> head_` producers claim via `fetch_add` (same pattern as `MemTable::emplace`), bounds-checked with a rollback on overflow. No consumer/reader side yet, no wraparound — just proving the producer side (`push`) is a real, working implementation, not a stub.
+
+**Theory studied to get the design right this time:** read through the LMAX Disruptor paper and Preshing's lock-free/memory-order posts. Worked through `MemTable::emplace`'s own comment ("In a real SPSC ring buffer this release would be on a separate head index") and identified a real, if currently latent, gap: `size_`'s `fetch_add(relaxed)` happens *before* the data write, with no subsequent `release` operation — so a reader's `acquire` load of `size_` has no formally-guaranteed pairing proving the data write is visible. Works today only under the single-producer contract; the fix (splitting "claim" from "publish" into two separate steps, matching Disruptor's claim-sequence/cursor split) is deferred to `LockFreeQueue`'s consumer side, which doesn't exist yet — no reader means this gap doesn't bite today.
+
+**Bugs hit while scaffolding:** `std::vector<TelemetryPacket>` needs the *complete* type to allocate storage — `queue.hpp` only transitively sees `memtable.hpp`'s forward declaration of `TelemetryPacket`, causing "incomplete type" errors until `queue.cpp` added `#include "zcpy_bridge/lib.h"` (the cxx-generated header with the full definition) — same lesson as `Ingester`'s `MemTable` value-member requirement, now recurring in a new spot.
+
+Next: stage 2 — the dedicated writer thread that drains the queue and becomes the *only* caller of `Ingester::emplace`/`ingest()`.
+
 ## 2026-08-02 — Found a real data race under concurrency, before it shipped
 
 **Built:** a multi-threaded stress test in `main.cpp` — three `std::thread`s, each looping `emplace`/`ingest()` calls against the *same* `Ingester` concurrently. Added `-fsanitize=thread` support via a new CMake option, `ZCPY_ENABLE_TSAN` (default `OFF`, since ThreadSanitizer roughly doubles memory use and slows execution 5-15x — not something to leave on by default). Verified the option works from a completely clean `rm -rf build` reconfigure, not just a stale cached command-line flag.

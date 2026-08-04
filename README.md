@@ -97,7 +97,9 @@ The binary is self-testing: it ingests a batch, proves pointer identity across t
 - [x] Multi-stream end-to-end proof — two live streams (AMD, NVDA), each fully validated and WAL'd independently through `ingest_packets`
 - [x] Stateful `Ingester` handle — bundles `MemTable` + `stream_id` into one object; `emplace`/`ingest()` never expose a raw `stream_id` to callers
 - [x] Found a real data race under concurrency (ThreadSanitizer-verified, `ZCPY_ENABLE_TSAN` CMake option) — `Ingester::ingest()`'s unsynchronized counter causes a stuck-loop bug under concurrent callers
-- [ ] Lock-free MPSC queue + single dedicated writer thread (single-writer principle, LMAX Disruptor pattern) — the real fix; a mutex would work but undercuts the lock-free goal
+- [x] `LockFreeQueue` scaffolded — fixed-capacity producer-side `push` via atomic `fetch_add`, no wraparound/consumer yet (stage 1 of the single-writer plan)
+- [ ] Dedicated writer thread draining the queue — the only caller of `Ingester::emplace`/`ingest()`, guaranteeing order without locks (stage 2)
+- [ ] Ring-buffer wraparound for indefinite queue operation (stage 3)
 
 ## Progress log
 

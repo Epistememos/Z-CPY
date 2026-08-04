@@ -39,6 +39,7 @@ add_executable(zcpy_engine
     src/cpp/main.cpp
     src/cpp/memtable.cpp
     src/cpp/ingester.cpp
+    src/cpp/queue.cpp
 )
 
 target_compile_features(zcpy_engine PRIVATE cxx_std_20)
@@ -83,6 +84,7 @@ add_executable(zcpy_bench
     bench/bench_ingest.cpp
     src/cpp/memtable.cpp
     src/cpp/ingester.cpp
+    src/cpp/queue.cpp
 )
 
 target_compile_features(zcpy_bench PRIVATE cxx_std_20)
